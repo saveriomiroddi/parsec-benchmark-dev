@@ -33,9 +33,14 @@ Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #include "tpool.h"
 #include "queue.h"
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 #define DEFAULT_DEPTH	25
 #define MAXR	100
@@ -544,9 +549,12 @@ int main (int argc, char *argv[])
 
 	cnt_enqueue = cnt_dequeue = 0;
 
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 	p_load = tpool_create(t_load_desc, NTHREAD_LOAD);
 	p_seg = tpool_create(t_seg_desc, NTHREAD_SEG);
 	p_extract = tpool_create(t_extract_desc, NTHREAD_EXTRACT);
@@ -561,9 +569,13 @@ int main (int argc, char *argv[])
 	tpool_join(p_seg, NULL);
 	tpool_join(p_load, NULL);
 
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
 	tpool_destroy(p_load);
 	tpool_destroy(p_seg);

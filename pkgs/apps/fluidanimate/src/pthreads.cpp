@@ -25,9 +25,14 @@
 #include "fluidview.hpp"
 #endif
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 //Uncomment to add code to check that Courant–Friedrichs–Lewy condition is satisfied at runtime
 //#define ENABLE_CFL_CHECK
@@ -1237,9 +1242,12 @@ int main(int argc, char *argv[])
   InitVisualizationMode(&argc, argv, &AdvanceFrameVisualization, &numCells, &cells, &cnumPars);
 #endif
 
-#ifdef ENABLE_PARSEC_HOOKS
-  __parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 #if defined(WIN32)
   thread_args* targs = (thread_args*)alloca(sizeof(thread_args)*threadnum);
 #else
@@ -1259,9 +1267,13 @@ int main(int argc, char *argv[])
   for(int i = 0; i < threadnum; ++i) {
     pthread_join(thread[i], NULL);
   }
-#ifdef ENABLE_PARSEC_HOOKS
-  __parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
   if(argc > 4)
     SaveFile(argv[4]);

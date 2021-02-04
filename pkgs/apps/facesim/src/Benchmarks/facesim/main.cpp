@@ -10,9 +10,14 @@
 #include "Storytelling/STORYTELLING_EXAMPLE.h"
 #include "../../Public_Library/Utilities/LOG.h"
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 using namespace PhysBAM;
 

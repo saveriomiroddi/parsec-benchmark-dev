@@ -22,9 +22,14 @@
 #include "fluidview.hpp"
 #endif
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 //Uncomment to add code to check that Courant–Friedrichs–Lewy condition is satisfied at runtime
 //#define ENABLE_CFL_CHECK
@@ -1369,16 +1374,23 @@ int main(int argc, char *argv[])
 
 #ifndef ENABLE_VISUALIZATION
 
-#ifdef ENABLE_PARSEC_HOOKS
-  __parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
   
   for(int i = 0; i < framenum; ++i)
     AdvanceFrame();
 
-#ifdef ENABLE_PARSEC_HOOKS
-  __parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
 #else //ENABLE_VISUALIZATION
   Visualize();

@@ -60,9 +60,14 @@ using namespace std;
 static int omp_get_max_threads() {return 1;}
 #endif //_OPENMP
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 #define LINT sizeof(int)
 
@@ -145,9 +150,12 @@ int main(int argc, char **argv)
 	database_buf=new memory(60, 4194304L, 4194304L, 2);
 	fptree = (FP_tree*)fp_buf[0]->newbuf(1, sizeof(FP_tree));
 	fptree->init(-1, 0, 0);
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 	fptree -> scan1_DB(fdat);
 	wtime(&tdatap);
 
@@ -181,9 +189,13 @@ int main(int argc, char **argv)
 	}
 
 	fptree->FP_growth_first(fout);
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 	printLen();
 	if(fout)
 		fout->close();

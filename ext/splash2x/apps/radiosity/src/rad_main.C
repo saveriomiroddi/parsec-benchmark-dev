@@ -33,9 +33,14 @@
 
 /* ANL macro initialization */
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 MAIN_ENV;
 
 include(radiosity.h)
@@ -249,14 +254,21 @@ int main(int argc, char *argv[])
                 }
 
             /* And start processing */
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
             CREATE(radiosity, n_processors);
             WAIT_FOR_END(n_processors);
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
             /* Time stamp */
             CLOCK( time_rad_end );
@@ -404,14 +416,21 @@ void start_radiosity(long val)
                 }
 
             /* And start processing */
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
             CREATE(radiosity, n_processors);
             WAIT_FOR_END(n_processors);
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
             /* Time stamp */
             CLOCK( time_rad_end );
 
@@ -512,9 +531,12 @@ void start_radiosity(long val)
                             taskqueue_id[i] = assign_taskq(0) ;
                         }
 
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
                     CREATE(radiosity, n_processors/* - 1*/);
 
                     /* Decompose model objects into patches and build
@@ -542,9 +564,13 @@ void start_radiosity(long val)
                     process_tasks(0) ;
 
                     WAIT_FOR_END(n_processors/* - 1*/)
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
                         state = -1 ;
                 }
 

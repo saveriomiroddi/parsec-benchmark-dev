@@ -80,9 +80,14 @@
 #include "construct_grid.h"
 #include "interactions.h"
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 #define BASE ((((double) 4) - sqrt((double) 2)) / sqrt((double) 2))
 #define MAX_LINE_SIZE 100
@@ -146,14 +151,21 @@ int main (int argc, char *argv[])
    }
    ParallelExecute();
    WAIT_FOR_END(Number_Of_Processors - 1);*/
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
    CREATE(ParallelExecute, Number_Of_Processors);
    WAIT_FOR_END(Number_Of_Processors);
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
    printf("Finished FMM\n");
    PrintTimes();

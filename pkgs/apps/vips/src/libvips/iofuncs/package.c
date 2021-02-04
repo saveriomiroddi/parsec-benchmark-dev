@@ -60,6 +60,13 @@
 #include <dmalloc.h>
 #endif /*WITH_DMALLOC*/
 
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 /* Standard VIPS packages.
  */
 extern im_package im__arithmetic;
@@ -1134,9 +1141,11 @@ im_run_command( char *name, int argc, char **argv )
 	static im_object object_array[IM_MAX_ARGS];
 	im_object *vargv = object_array;
 	im_function *fn;
-	#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_begin();
-	#endif
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 
 	/* Search packages for a matching function.
 	 */
@@ -1161,10 +1170,12 @@ im_run_command( char *name, int argc, char **argv )
 	if( destroy_args( fn, vargv ) )
 		return( -1 );
 	im_free_vargv( fn, vargv );
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
 
-	#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_end();
-	#endif
 	return( 0 );
 }
 

@@ -57,9 +57,14 @@
 using namespace tbb;
 #endif //USE_TBB
 
-#if defined(ENABLE_PARSEC_HOOKS)
-#include <hooks.h>
-#endif //ENABLE_PARSEC_HOOKS
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 #include "ParticleFilter.h"
 #include "TrackingModel.h"
@@ -186,9 +191,12 @@ int mainOMP(string path, int cameras, int frames, int particles, int layers, int
 
 	vector<float> estimate;																//expected pose from particle distribution
 
-#if defined(ENABLE_PARSEC_HOOKS)
-        __parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 	for(int i = 0; i < frames; i++)														//process each set of frames
 	{	cout << "Processing frame " << i << endl;
 		if(!pf.Update((float)i))														//Run particle filter step
@@ -200,9 +208,13 @@ int mainOMP(string path, int cameras, int frames, int particles, int layers, int
 		if(OutputBMP)
 			pf.Model().OutputBMP(estimate, i);											//save output bitmap file
 	}
-#if defined(ENABLE_PARSEC_HOOKS)
-        __parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
 	return 1;
 }
@@ -247,9 +259,12 @@ int mainPthreads(string path, int cameras, int frames, int particles, int layers
 
 	vector<float> estimate;																//expected pose from particle distribution
 
-#if defined(ENABLE_PARSEC_HOOKS)
-        __parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 	for(int i = 0; i < frames; i++)														//process each set of frames
 	{	cout << "Processing frame " << i << endl;
 		if(!pf.Update((float)i))														//Run particle filter step
@@ -264,9 +279,13 @@ int mainPthreads(string path, int cameras, int frames, int particles, int layers
 	}
 	model.close();
 	workers.JoinAll();
-#if defined(ENABLE_PARSEC_HOOKS)
-        __parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
 	return 1;
 }
@@ -344,9 +363,12 @@ int mainSingleThread(string path, int cameras, int frames, int particles, int la
 
 	vector<float> estimate;																//expected pose from particle distribution
 
-#if defined(ENABLE_PARSEC_HOOKS)
-        __parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 	for(int i = 0; i < frames; i++)														//process each set of frames
 	{	cout << "Processing frame " << i << endl;
 		if(!pf.Update((float)i))														//Run particle filter step
@@ -358,9 +380,13 @@ int mainSingleThread(string path, int cameras, int frames, int particles, int la
 		if(OutputBMP)
 			pf.Model().OutputBMP(estimate, i);											//save output bitmap file
 	}
-#if defined(ENABLE_PARSEC_HOOKS)
-        __parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
 	return 1;
 }

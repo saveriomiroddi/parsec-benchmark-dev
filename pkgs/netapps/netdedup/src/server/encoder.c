@@ -53,9 +53,14 @@
 #include <pthread.h>
 #endif //ENABLE_PTHREADS
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif //ENABLE_PARSEC_HOOKS
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 /* for tcpip stack */
 #include <sys/types.h>
@@ -1500,9 +1505,12 @@ void Encode(config_t * _conf) {
   data_process_args.fd = fd;
   data_process_args.input_file.size = bytes_input;
 
-#ifdef ENABLE_PARSEC_HOOKS
-    __parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 
 #ifdef ENABLE_PARSEC_UPTCPIP
     parsec_enter_tcpip_roi();
@@ -1578,9 +1586,13 @@ void Encode(config_t * _conf) {
     pthread_join(threads_compress[i], (void **)&threads_compress_rv[i]);
   pthread_join(threads_send, NULL);
 
-#ifdef ENABLE_PARSEC_HOOKS
-  __parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
   /* free queues */
   for(i=0; i<nqueues; i++) {
@@ -1616,9 +1628,12 @@ void Encode(config_t * _conf) {
   generic_args.nqueues = -1;
   generic_args.fd = fd;
 
-#ifdef ENABLE_PARSEC_HOOKS
-  __parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 #ifdef ENABLE_PARSEC_UPTCPIP
     parsec_enter_tcpip_roi();
 #endif
@@ -1629,9 +1644,13 @@ void Encode(config_t * _conf) {
 #ifdef ENABLE_PARSEC_UPTCPIP
     parsec_exit_tcpip_roi();
 #endif
-#ifdef ENABLE_PARSEC_HOOKS
-  __parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
 #endif //ENABLE_PTHREADS
 

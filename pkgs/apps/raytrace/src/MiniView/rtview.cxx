@@ -11,9 +11,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 using namespace RTTL;
 using namespace LRT;
@@ -479,17 +484,24 @@ int main(int argc, char* argv[])
     glutMainLoop();
   } else {
     cout << "Rendering " << framesToRender << " frames... " << endl << flush;
-#ifdef ENABLE_PARSEC_HOOKS
-    __parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
     int frame = 0;
     do {
       render();
       frame++;
     } while(!(__builtin_expect(framesToRender > 0,0) && frame >= framesToRender));
-#ifdef ENABLE_PARSEC_HOOKS
-    __parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
     cout << "Done" << endl << flush;
   }
 

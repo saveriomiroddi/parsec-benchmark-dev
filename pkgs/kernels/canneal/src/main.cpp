@@ -38,9 +38,14 @@
 #include <pthread.h>
 #endif
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 #include "annealer_types.h"
 #include "annealer_thread.h"
@@ -106,9 +111,12 @@ int main (int argc, char * const argv[]) {
 	
 	annealer_thread a_thread(&my_netlist,num_threads,swaps_per_temp,start_temp,number_temp_steps);
 	
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 #ifdef ENABLE_THREADS
 	std::vector<pthread_t> threads(num_threads);
 	void* thread_in = static_cast<void*>(&a_thread);
@@ -121,9 +129,13 @@ int main (int argc, char * const argv[]) {
 #else
 	a_thread.Run();
 #endif
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 	
 	cout << "Final routing is: " << my_netlist.total_routing_cost() << endl;
 

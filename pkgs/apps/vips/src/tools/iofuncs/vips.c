@@ -79,10 +79,6 @@
 
 #include <vips/vips.h>
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
-
 #ifdef OS_WIN32
 #define strcasecmp(a,b) _stricmp(a,b)
 #endif

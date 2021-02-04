@@ -12,9 +12,14 @@
 #include <math.h>
 #include <string.h>
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 // Multi-threaded pthreads header
 #ifdef ENABLE_THREADS
@@ -415,9 +420,12 @@ int main (int argc, char **argv)
 
     printf("Size of data: %d\n", numOptions * (sizeof(OptionData) + sizeof(int)));
 
-#ifdef ENABLE_PARSEC_HOOKS
-    __parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 
 #ifdef ENABLE_THREADS
 #ifdef WIN32
@@ -465,9 +473,13 @@ int main (int argc, char **argv)
 #endif //ENABLE_OPENMP
 #endif //ENABLE_THREADS
 
-#ifdef ENABLE_PARSEC_HOOKS
-    __parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
     //Write prices to output file
     file = fopen(outputFile, "w");

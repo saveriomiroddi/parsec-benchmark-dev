@@ -17,9 +17,14 @@
 #include <pthread.h>
 #endif //ENABLE_PTHREADS
 
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif //ENABLE_PARSEC_HOOKS
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 
 
 config_t * conf;

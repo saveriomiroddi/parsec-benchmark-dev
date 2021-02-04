@@ -6,9 +6,14 @@
 //#####################################################################
 #include "SOLIDS_FLUIDS_DRIVER.h"
 #include "../Utilities/LOG.h"
-#ifdef ENABLE_PARSEC_HOOKS
-#include <hooks.h>
-#endif
+
+#include <sys/time.h>
+#include <stdio.h>
+#include <stddef.h>
+
+static double _roi_time_begin;
+static double _roi_time_end;
+
 using namespace PhysBAM;
 //#####################################################################
 // Function Execute_Main_Program
@@ -20,13 +25,20 @@ Execute_Main_Program()
 
 	if (!example.restart && example.write_output_files && !example.write_substeps) Write_Output_Files (example.first_frame);
 
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_begin();
-#endif
+
+fflush(NULL);
+struct timeval _t_start;
+gettimeofday(&_t_start, NULL);
+_roi_time_begin = (double)_t_start.tv_sec + (double)_t_start.tv_usec * 1e-6;
+
 	Simulate_To_Frame (example.last_frame);
-#ifdef ENABLE_PARSEC_HOOKS
-	__parsec_roi_end();
-#endif
+
+struct timeval _t_end;
+gettimeofday(&_t_end, NULL);
+_roi_time_end = (double)_t_end.tv_sec + (double)_t_end.tv_usec * 1e-6;
+printf("ROI time measured: %.3fs\n", _roi_time_end - _roi_time_begin);
+fflush(NULL);
+
 
 	//Always write last frame for verification purposes
 	if (!example.write_output_files && !example.write_substeps) Write_Output_Files (example.last_frame);
