@@ -1,6 +1,6 @@
 # PARSEC Benchmark with tweaks (hardcoded ROI computation, parallel make)
 
-This is a fork of the [Parsec benchmark fork modified for cross-compilation](https://github.com/darchr/parsec-benchmark), with a couple of tweaks.
+This is a fork of the [Parsec benchmark fork modified for cross-compilation](https://github.com/darchr/parsec-benchmark), with a few tweaks.
 
 ## Hardcoded ROI computation
 
@@ -13,3 +13,7 @@ Note that the `parsec-benchmark` fork not only improves cross-compilation compat
 ## Parallel make
 
 The `parsecmgmt` script runs invokes `make` in sequential mode (without the `-j` option); I've added the jobs parameter with one recipe per processor (`-j $(nproc)`), in order to use speed up the compilation as much as possible.
+
+## GCC 10 compatibility
+
+At least one package (`splash2x.raytrace`, and likely the `splash2` counterpart) requires a change in order to compile on GCC 10, which I've applied to its makefile.
