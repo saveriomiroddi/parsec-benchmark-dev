@@ -24,6 +24,11 @@
 # LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE 
 # OF THIS SOFTWARE.
 #
+
+# Allow native compilation.
+#
+HOSTCC := $(if $(HOSTCC),$(HOSTCC),$(CC))
+
 DESTDIR=/usr/local
 #
 AR=	/usr/bin/ar
