@@ -4,6 +4,7 @@ PREFIX=${PARSECDIR}/pkgs/kernels/dedup/inst/${PARSECPLAT}
 
 TARGET=dedup
 
+CFLAGS += -fcommon
 CFLAGS += -Wall -fno-strict-aliasing -D_XOPEN_SOURCE=600
 
 ostype=$(findstring solaris, ${PARSECPLAT})
