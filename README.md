@@ -16,4 +16,8 @@ The `parsecmgmt` script runs invokes `make` in sequential mode (without the `-j`
 
 ## GCC 10 compatibility
 
-At least one package (`splash2x.raytrace`, and likely the `splash2` counterpart) requires a change in order to compile on GCC 10, which I've applied to its makefile.
+At least two packages (`dedup`, `splash2x.raytrace`, and likely the `splash2` counterpart) require a change in order to compile on GCC 10, which I've applied to its makefile.
+
+## `dedup`: Remove provided, non-portable, SSL library dependency
+
+The `dedup` package relies on the provided SSL library, which is non-portable (as it has x86 ASM). At least in the `gcc-pthread` configuration mode, it can be removed without side effects though, making `dedup` compilable on riscv64.
