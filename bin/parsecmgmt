@@ -1,5 +1,6 @@
-#!/bin/bash
-#
+#!/bin/sh
+# shellcheck disable=SC2046,SC2086,SC2236,SC1090,SC2231
+
 # Copyright (C) 2006-2011 Princeton University
 # All rights reserved.
 # Author: Christian Bienia
@@ -28,28 +29,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# CHANGELOG
-#
-# From PARSEC 2.1 to PARSEC 3.0:
-#  - Added package configuration files and eliminated central parsec.conf file
-#  - Make parsecmgmt display more information about packages
-#
-# From PARSEC 2.0 to PARSEC 2.1:
-#  - Made PARSECPLAT string detection more robust
-#  - Place log files in separate log/${PARSECPLAT} subdirectories
-#  - Always append build config name to PARSECPLAT
-#
-# From PARSEC 1.0 to PARSEC 2.0:
-#  - parsecmgmt now adds '$CC_HOME/lib' and '$CC_HOME/lib64' to LD_LIBRARY_PATH
-#  - file 'compile-info' renamed to 'build-info'
-#  - option `-x' added to append extention to platform descriptor string
-#  - option `-k' to keep run directory
-#  - eliminated need for "inputs" list from file parsec.conf
-#  - auto-detect available aliases and packages
-#  - conditional package dependencies (also depend on build configuration now)
-#  - Renamed action `uninstallall' to `fulluninstall'
-#  - Renamed action `cleanall' to `fullclean'
-
+set -o errexit
+set -o nounset
 
 
 #################################################################
@@ -66,8 +47,6 @@
 # If $PARSECPLAT is not set, the script will automaticaly determine a name
 #export PARSECPLAT=""
 
-# Should output be logged? Anything other than "TRUE" will turn off logging
-create_log="TRUE"
 
 
 
@@ -89,7 +68,7 @@ oprefix="[PARSEC]"
 # Initialize the script
 #
 # Arguments: none
-function parsec_init {
+parsec_init() {
   # We need to hard-wire a few commands because we need them for the path detection
   PWD="pwd"
   BASENAME="basename"
@@ -101,99 +80,48 @@ function parsec_init {
   # Try to find path
   uniquefile=".parsec_uniquefile"
   parsecdir=""
-  if [ ! -z "${PARSECDIR}" ]; then
-    # User defined PARSECDIR, check it
-    parsecdir="${PARSECDIR}"
-    if [ ! -f "${parsecdir}/${uniquefile}" ]; then
-      echo "${oprefix} Error: Variable PARSECDIR points to '${PARSECDIR}', but this does not seem to be the PARSEC directory. Either unset PARSECDIR to make me try to autodetect the path or set it to the correct value."
-      exit 1
+  # Try to autodetect path by looking at path used to invoke this script
+
+  # Try to extract absoute or relative path
+  if [ "${0:0:1}" == "/" ]; then
+    # Absolute path given
+    eval parsecdir=$(${DIRNAME} $(${DIRNAME} $0))
+    # Check
+    if [ -f "${parsecdir}/${uniquefile}" ]; then
+      PARSECDIR=${parsecdir}
     fi
   else
-    # Try to autodetect path by looking at path used to invoke this script
-
-    # Try to extract absoute or relative path
-    if [ "${0:0:1}" == "/" ]; then
-      # Absolute path given
-      eval parsecdir=$(${DIRNAME} $(${DIRNAME} $0))
-      # Check
-      if [ -f "${parsecdir}/${uniquefile}" ]; then
-        PARSECDIR=${parsecdir}
-      fi
-    else
-      # No absolute path, maybe relative path?
-      eval parsecdir=$(${PWD})/$(${DIRNAME} $(${DIRNAME} $0))
-      # Check
-      if [ -f "${parsecdir}/${uniquefile}" ]; then
-        PARSECDIR=${parsecdir}
-      fi
-    fi
-
-    # If PARSECDIR is still undefined, we try to guess the path
-    if [ -z "${PARSECDIR}" ]; then
-      # Check current directory
-      if [ -f "./${uniquefile}" ]; then
-        parsecdir="$(${PWD})"
-        PARSECDIR=${parsecdir}
-      fi
-    fi
-    if [ -z "${PARSECDIR}" ]; then
-      # Check next-higher directory
-      if [ -f "../${uniquefile}" ]; then
-        parsecdir="$(${PWD})/.."
-        PARSECDIR=${parsecdir}
-      fi
+    # No absolute path, maybe relative path?
+    eval parsecdir=$(${PWD})/$(${DIRNAME} $(${DIRNAME} $0))
+    # Check
+    if [ -f "${parsecdir}/${uniquefile}" ]; then
+      PARSECDIR=${parsecdir}
     fi
   fi
 
-  # Make sure PARSECDIR is defined and exported
+  # If PARSECDIR is still undefined, we try to guess the path
   if [ -z "${PARSECDIR}" ]; then
-    echo "${oprefix} Error: Unable to autodetect path to the PARSEC benchmark suite. Either define an environment variable PARSECDIR, or edit ${me} and set PARSECDIR to the correct value at the beginning of the file."
-    exit 1
+    # Check current directory
+    if [ -f "./${uniquefile}" ]; then
+      parsecdir="$(${PWD})"
+      PARSECDIR=${parsecdir}
+    fi
   fi
+  if [ -z "${PARSECDIR}" ]; then
+    # Check next-higher directory
+    if [ -f "../${uniquefile}" ]; then
+      parsecdir="$(${PWD})/.."
+      PARSECDIR=${parsecdir}
+    fi
+  fi
+
   export PARSECDIR
 
   # Eliminate trailing `/.' from PARSECDIR
   PARSECDIR=${PARSECDIR/%\/./}
 
-  # Determine OS name to use for automatically determined PARSECPLAT
-  case "${OSTYPE}" in
-  *linux*)   ostype="linux";;
-  *solaris*) ostype="solaris";;
-  *bsd*)     ostype="bsd";;
-  *aix*)     ostype="aix";;
-  *hpux*)    ostype="hpux";;
-  *irix*)    ostype="irix";;
-  *amigaos*) ostype="amigaos";;
-  *beos*)    ostype="beos";;
-  *bsdi*)    ostype="bsdi";;
-  *cygwin*)  ostype="windows";;
-  *darwin*)  ostype="darwin";;
-  *interix*) ostype="interix";;
-  *os2*)     ostype="os2";;
-  *osf*)     ostype="osf";;
-  *sunos*)   ostype="sunos";;
-  *sysv*)    ostype="sysv";;
-  *sco*)     ostype="sco";;
-  *)         ostype="${OSTYPE}";;
-  esac
-
-  # Determine HOST name to use for automatically determined PARSECPLAT
-  case "${HOSTTYPE}" in
-  *i386*)    hosttype="i386";;
-  *x86_64*)  hosttype="amd64";;
-  *amd64*)   hosttype="amd64";;
-  *i486*)    hosttype="amd64";;
-  *sparc*)   hosttype="sparc";;
-  *sun*)     hosttype="sparc";;
-  *ia64*)    hosttype="ia64";;
-  *itanium*) hosttype="ia64";;
-  *powerpc*) hosttype="powerpc";;
-  *ppc*)     hosttype="powerpc";;
-  *alpha*)   hosttype="alpha";;
-  *mips*)    hosttype="mips";;
-  *arm*)     hosttype="arm";;
-  *)         hosttype="${HOSTTYPE}";;
-  esac
+  ostype="linux"
+  hosttype="${HOSTTYPE}"
 
   # Determine first part of value to use for PARSECPLAT environment variable if not defined by user
   # Note: We will append the compiler configuration to that to get the final value for PARSECPLAT
@@ -201,23 +129,13 @@ function parsec_init {
 
   # Define some global directories
   benchdir=${parsecdir}/pkgs
-  logdir=${parsecdir}/log
 
   # Try to load OS-specific configuration to get binaries and correct arguments
   sysconfig="${PARSECDIR}/config/${ostype}.sysconf"
-  if [ -f "${sysconfig}" ]; then
-    source ${sysconfig}
-  else
-    echo "${oprefix} Error: Cannot load system configuration file '${sysconfig}' for OS type '${ostype}'. Please create a new system configuration file."
-    exit 1
-  fi
+  source ${sysconfig}
 
   # Setup environment so PARSEC tools are usable by other programs
-  if [ -z "${PATH}" ]; then
-    export PATH="${PARSECDIR}/bin"
-  else
-    export PATH="${PARSECDIR}/bin:${PATH}"
-  fi
+  export PATH="${PARSECDIR}/bin:${PATH}"
 
   # Build list of aliases from package configurations
   list_of_aliases=""
@@ -225,7 +143,7 @@ function parsec_init {
     source $file
     # Append unique aliases to global list, build package list for each alias
     for newalias in ${pkg_aliases}; do
-      local is_duplicate=""
+      is_duplicate=""
       for alias in ${list_of_aliases}; do
         if [[ "$newalias" == "$alias" ]]; then
           is_duplicate=TRUE
@@ -239,12 +157,10 @@ function parsec_init {
       fi
       is_duplicate=""
       # Append package to alias list
-      local pkg
-      local pkglist
       eval pkg=$(${BASENAME} $file)
       pkg=${pkg%\.pkgconf}
 
-      # Add prefex ('parsec' or 'splash2')to the pkg 
+      # Add prefex ('parsec' or 'splash2')to the pkg
       pkg=${pkg/\./_}
 
       eval  pkglist=\"\$alias_${newalias}\"
@@ -258,14 +174,13 @@ function parsec_init {
 # Process args and setup argument-dependent environment
 #
 # Arguments: all arguments given to the script (i.e. "$@")
-function process_args {
+process_args() {
   # Default configuration to use
   default_pkgs="parsec splash2 splash2x"
   default_build="gcc"
   default_rundir="${PARSECDIR}"
   default_inputsize="test"
   default_nthreads="1"
-  default_submit="time"
 
   # Usage
   usage="\
@@ -283,14 +198,12 @@ Options:
                      benchmarks.
     -i INPUT         The input to use to run the benchmarks. Default: '$default_inputsize'
     -n THREADS       The minimum number of threads to use. Default: '$default_nthreads'
-    -s SUBMIT        Command to use to submit the benchmark for execution.
-                     Default: '$default_submit'
     -x EXTENSION     Extension to append to platform descriptor string.
                      Default: none
     -k               Keep & use run directory as found, do not unpack inputs for
                      benchmark execution. Assume everything is already set up.
-    -m NETMODE       Execution mode for network workloads. 
-                     NETMODE can be either 'server' or 'client'. 
+    -m NETMODE       Execution mode for network workloads.
+                     NETMODE can be either 'server' or 'client'.
     -t THREADS       The number of user threads talking to the upTCP/IP stack. Default: '1'
     -r THREADS       The number of TCP/IP protocol receving threads. Default: '1'
     -l               Disable log.
@@ -309,60 +222,7 @@ Actions:
     'fulluninstall'  Like 'uninstall', but for all architectures.
     'status'         Shows a summary of the current status of the PARSEC
                      installation.
-    'info'           List available packages and configurations.
-
-
-Examples (1) [Compatible to PARSEC 2.1 but Extended]:
-    - Build all benchmarks of three suites, i.e., PARSEC, SPLASH-2 and SPLASH-2x:
-        $me -a build -p all
-    - Build only applications, use 'icc' as build configuration:
-        $me -a build -c icc -p apps
-    - Do a full cleanup after a build or benchmark run:
-        $me -a fullclean -p all
-    - Remove all generated files of the current architecture:
-        $me -a uninstall -p all
-    - Run benchmark 'ferret' w/ input 'simsmall' and 4 threads:
-        $me -a run -p ferret -i simsmall -n 4
-    - Get a quick summary of all available packages and features:
-        $me -a info
-    - Show which kernel binaries have been installed:
-        $me -a status -p kernels
-
-
-Examples (2) [NEW: Network Benchmarks]:
-    - Check the status of all components involved in network benchmarks:
-        $me -a status -p netapps
-    - Build network benchmark 'netstreamcluster':
-        $me -a build -p raytrace
-    - Build all network benchmark:
-        $me -a build -p netapps
-    - Run network benchmark 'netdedup' w/ input 'native' and 2 server threads:
-        $me -a run -p netdedup -i native -n 2
-    - Run network benchmark 'netferret' w/ input 'simlarge', 4 server threads and 2 client connections:
-        $me -a run -p netferret -i simlarge -n 4 -t 2
-    - For simulation, run 'netdedup' server on a simulator w/ 4 threads and run client on a real machine:
-        $me -a run -p netdedup -i simlarge -n 4 -m server
-        $me -a run -p netdedup -i simlarge -m client
-    - Do a full cleanup for network benchmarks:
-        $me -a fullclean -p netapps
-
-
-Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
-    - Check the status of SPLASH-2 suite and SPLASH-2x suite:
-        $me -a status -p splash2
-        $me -a status -p splash2x
-    - Build benchmark 'raytrace' from SPLASH-2x suite other than PARSEC:
-        $me -a build -p splash2x.raytrace
-        $me -a build -p raytrace   ## defaultly from PARSEC (for comparison)
-    - Build benchmark 'fft' from SPLASH-2 suite with 'gcc-serial' build configuration:
-        $me -a build -c gcc-serial -p splash2.fft
-    - Build all benchmarks from SPLASH-2 suite and SPLASH-2x suite:
-        $me -a build -p splash2
-        $me -a build -p splash2x
-    - Run benchmark 'fft' from SPLASH-2x w/ input 'simsmall' and 4 threads:
-        $me -a run -p splash2x.fft -i simsmall -n 4
-    - Do a full cleanup for SPLASH-2 suite
-        $me -a fullclean -p splash2"
+    'info'           List available packages and configurations."
 
   # Define valid actions
   valid_actions="build run clean uninstall fullclean fulluninstall status info"
@@ -377,9 +237,6 @@ Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
   inputsize=""
   netmode=""
   nthreads=""
-  userthreads=""
-  rxthreads=""
-  submit=""
   extension=""
   extcmd=""
   keep_rundir=""
@@ -406,22 +263,6 @@ Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
         fi
         need_arg_for="-p"
         parsemode="PKGS";;
-      "-c" )
-        if [ ! -z "${need_arg_for}" ]; then
-          echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-c'"
-          echo "${usage}"
-          exit 1
-        fi
-        need_arg_for="-c"
-        parsemode="CONFIG";;
-      "-d" )
-        if [ ! -z "${need_arg_for}" ]; then
-          echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-d'"
-          echo "${usage}"
-          exit 1
-        fi
-        need_arg_for="-d"
-        parsemode="RUNDIR";;
       "-i" )
         if [ ! -z "${need_arg_for}" ]; then
           echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-i'"
@@ -438,66 +279,9 @@ Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
         fi
         need_arg_for="-n"
         parsemode="NTHREADS";;
-      "-t" )
-        if [ ! -z "${need_arg_for}" ]; then
-          echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-t'"
-          echo "${usage}"
-          exit 1
-        fi
-        need_arg_for="-t"
-        parsemode="USERTHREADS";;
-      "-r" )
-        if [ ! -z "${need_arg_for}" ]; then
-          echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-r'"
-          echo "${usage}"
-          exit 1
-        fi
-        need_arg_for="-r"
-        parsemode="RXTHREADS";;
-      "-s" )
-        if [ ! -z "${need_arg_for}" ]; then
-          echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-s'"
-          echo "${usage}"
-          exit 1
-        fi
-        need_arg_for="-s"
-        parsemode="SUBMIT";;
-      "-x" )
-        if [ ! -z "${need_arg_for}" ]; then
-          echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-x'"
-          echo "${usage}"
-          exit 1
-        fi
-        need_arg_for="-x"
-        parsemode="EXTENSION";;
-      "-X" )
-        if [ ! -z "${need_arg_for}" ]; then
-          echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-X'"
-          echo "${usage}"
-          exit 1
-        fi
-        need_arg_for="-X"
-        parsemode="EXTCMD";;
-      "-m" )
-        if [ ! -z "${need_arg_for}" ]; then
-          echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-m'"
-          echo "${usage}"
-          exit 1
-        fi
-        need_arg_for="-m"
-        parsemode="NETMODE";;
-     "-k" )
-        if [ ! -z "${need_arg_for}" ]; then
-          echo "${oprefix} Error: ${parsemode} expected between '${need_arg_for}' and '-k'"
-          echo "${usage}"
-          exit 1
-        fi
-        keep_rundir="yes";;
       "-h" )
         echo "${usage}"
         exit 0;;
-      "-l" )
-	create_log="FALSE";;
      *    )
         if [ ${arg:0:1} == "-" ]; then
           echo "${oprefix} Error: Unknown argument '${arg}'"
@@ -532,7 +316,7 @@ Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
                 eval tmparg="\"\${alias_${arg}}\""
                 if [ ! -z "${tmparg}" ]; then
                     is_valid="TRUE"
-                else # parsec pkg 
+                else # parsec pkg
                     tmparg=parsec_${arg}
                     arg=parsec.${arg}
                 fi
@@ -583,65 +367,6 @@ Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
               echo "${usage}"
               exit 1
             fi;;
-          "USERTHREADS" )
-            parsemode="none"
-            userthreads="${arg}"
-            # Note: This check also filters out strings (userthreads==0 in that case)
-            if [ "${userthreads}" -lt "1" ]; then
-              echo "${oprefix} Error: Illegal number of user threads: '${arg}'."
-              echo "${usage}"
-              exit 1
-            fi;;
-          "RXTHREADS" )
-            parsemode="none"
-            rxhreads="${arg}"
-            # Note: This check also filters out strings (rxthreads==0 in that case)
-            if [ "${rxthreads}" -lt "1" ]; then
-              echo "${oprefix} Error: Illegal number of receiving threads: '${arg}'."
-              echo "${usage}"
-              exit 1
-            fi;;
-          "SUBMIT" )
-            parsemode="none"
-            # Check whether specified program exists
-            cmd=$(echo "${arg}" | awk '{print $1}')
-            if [ ! -e "${cmd}" ]; then
-              # Check whether program is in path and give it a second try
-              cmd=$(which ${cmd}); rv=$?
-              if [ ! $rv -eq 0 ]; then
-                echo "${oprefix} Error: Cannot find file '${arg}'."
-                exit 1
-              fi
-            fi
-            # Check whether specified file is executable
-            if [ ! -x "${cmd}" ]; then
-              echo "${oprefix} Error: '${arg}' is not executable."
-              exit 1
-            fi
-            submit="${arg}";;
-          "EXTENSION" )
-            parsemode="none"
-            extension="${arg}";;
-          "EXTCMD" )
-            parsemode="none"
-            extpkg="${arg}"
-            extcmd="${PARSECDIR}/toolkit/${extpkg}/${extpkg}.sh ${PARSECDIR}/toolkit/${extpkg}/parameter.cfg &"
-            eval ${extcmd}
-            echo ""
-            echo "NOTE: The external package ${extpkg} is running in background. Please check results later."
-            echo ""
-            exit 0;;
-         "NETMODE" )
-            parsemode="none"
-            if [ ! ${arg} == "server" ] && [ ! ${arg} == "client" ]; then
-		echo "illegal value for NETMODE: NETMODE should be either 'server' or 'client'"
-		exit 1
-	    fi
-            netmode="${arg}";;
-         *        )
-            echo "${oprefix} Error: Unknown argument '${arg}'"
-            echo "${usage}"
-            exit 1;;
         esac;;
     esac
 
@@ -696,17 +421,6 @@ Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
     inputsize="${default_inputsize}"
   fi
 
-  # Set submit program
-  if [ -z "${submit}" ]; then
-    # Use default value
-    submit="${default_submit}"
-  fi
-
-  # Determine build
-  if [ -z "${build}" ]; then
-    build="${default_build}"
-  fi
-
   # Define PARSECPLAT, if not set by user
   if [ -z "${PARSECPLAT}" ]; then
     PARSECPLAT=${hostostype}.${build}
@@ -738,10 +452,8 @@ Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
   expanded_aliases=""
   for token in ${pkgs}; do
     # Is it a recognized alias?
-    local tmpbench
     tmpbench=${token:0:5}
     if [ $tmpbench == "parsec" ]; then
-        local tmppkg
         tmppkg=${token:7}
         eval temp="\"\${alias_${tmppkg}}\""
         if [ ! -z "${temp}" ]; then
@@ -761,7 +473,6 @@ Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
   pkgs_nonapps="${alias_tools} ${alias_libs}"
   for pkg in $expanded_aliases; do
     is_included=""
-    local tmppkg
     # restore to xxxx.xxxx format
     tmppkg=${pkg/_/\.}
     for dummy in $pkgs; do
@@ -785,256 +496,6 @@ Examples (3) [NEW: SPLASH-2 Suite and SPLASH-2x Suite]:
       pkgs="${pkgs} ${tmppkg}"
     fi
   done
-
-  # Initialize logging functionality
-  logfile=""
-  if [ "${action}" == "build" ]; then
-    eval logfile="build_\$(${LOGDATE}).log"
-  elif [ "${action}" == "run" ]; then
-    eval logfile="run_${NTHREADS}_${inputsize}_\$(${LOGDATE}).log"
-  fi
-  if [ "$create_log" == "TRUE" ] && [ ! -z "$logfile" ]; then
-    ${MKDIR} ${logdir}/${PARSECPLAT}
-    log=${logdir}/${PARSECPLAT}/${logfile}
-  else
-    log="/dev/null"
-  fi
-}
-
-# build_info
-#
-# Create a text file containing information about the build.
-# Assumes that all relevant configuration files have already been sourced.
-#
-# Arguments: $1 - Package name
-#            $2 - The name of the text file to create
-function build_info {
-  if [ -z "$1" ]; then
-    echo "${oprefix} Error: build_info called with no arguments." 2>&1 | ${TEE} ${log}
-    exit 1
-  fi
-  local package_name="$1"
-  if [ -z "$2" ]; then
-    echo "${oprefix} Error: build_info called with insufficient number of arguments." 2>&1 | ${TEE} ${log}
-    exit 1
-  fi
-  local cinfo_file="$2"
-
-  echo "PARSEC Compile Information" > ${cinfo_file}
-  echo "==========================" >> ${cinfo_file}
-  echo "Package '${package_name}'" >> ${cinfo_file}
-  eval echo "Built on \$(${DATE})" >> ${cinfo_file}
-  echo >> ${cinfo_file}
-
-  # Package-specific build information
-  local env_package="${build_env}"
-  local build_conf_package="${build_conf} ${build_conf_global}"
-
-  echo "Configure arguments: ${build_conf_package}" >> ${cinfo_file}
-  echo >> ${cinfo_file}
-  echo "Environment modifications: ${env_package}" >> ${cinfo_file}
-  echo >> ${cinfo_file}
-
-  echo "CC: ${CC}" >> ${cinfo_file}
-  echo "Version: ${CC_ver}" >> ${cinfo_file}
-  echo "CFLAGS: ${CFLAGS}" >> ${cinfo_file}
-  echo >> ${cinfo_file}
-
-  echo "CXX: ${CXX}" >> ${cinfo_file}
-  echo "Version: ${CXX_ver}" >> ${cinfo_file}
-  echo "CXXFLAGS: ${CXXFLAGS}" >> ${cinfo_file}
-  echo >> ${cinfo_file}
-
-  echo "CCAS: ${CCAS}" >> ${cinfo_file}
-  echo "Version: ${CCAS_ver}" >> ${cinfo_file}
-  echo "CCASFLAGS: ${CCASFLAGS}" >> ${cinfo_file}
-  echo >> ${cinfo_file}
-
-  echo "LD: ${LD}" >> ${cinfo_file}
-  echo "Version: ${LD_ver}" >> ${cinfo_file}
-  echo "LDFLAGS: ${LDFLAGS}" >> ${cinfo_file}
-  echo >> ${cinfo_file}
-
-  echo "JAVAC: ${JAVAC}" >> ${cinfo_file}
-  echo "Version: ${JAVAC_ver}" >> ${cinfo_file}
-  echo "JFLAGS: ${JFLAGS}" >> ${cinfo_file}
-  echo >> ${cinfo_file}
-
-  echo "[EOF]" >> ${cinfo_file}
-}
-
-# build_package
-#
-# Build a software package and recursively all packages it depends on
-#
-# Arguments: $1 - The package name
-function build_package {
-  if [ -z "$1" ]; then
-    echo "${oprefix} Error: build_package called with no arguments." 2>&1 | ${TEE} ${log}
-    exit 1
-  fi
-  local pkg=$1
-
-  echo "${oprefix} [---------- Analyzing package ${pkg} ----------]" 2>&1 | ${TEE} ${log}
-
-  # Load package configuration
-  source ${PARSECDIR}/config/packages/${pkg}.pkgconf
-
-  # Define package-specific directories
-  if [ -z "$pkg_group" ]; then
-    echo "${oprefix} Error: Group of package ${pkg} is unknown." 2>&1 | ${TEE} ${log}
-    exit 1
-  fi
-
-  # determine top directory
-  local bench
-  bench=`expr match ${pkg} '\(.*\.\)'`
-  eval pkgname="${pkg#${bench}}"
-  bench=${bench%\.}
-
-  if [ ${bench} == "parsec" ]; then
-      benchdir="pkgs"
-  else
-      eval benchdir="ext\/${bench}"
-  fi
-  
-  local pkgdir=${PARSECDIR}/${benchdir}/${pkg_group}/${pkgname}
-  local pkgsrcdir=${pkgdir}/src
-  local pkgobjdir=${pkgdir}/obj/${PARSECPLAT}
-  local pkginstdir=${pkgdir}/inst/${PARSECPLAT}
-  local pkgparsecdir=${pkgdir}/parsec
-
-  # Check whether package has already been built
-  if [ -f "${pkginstdir}/build-info" ]; then
-    echo "${oprefix} Package ${pkg} already exists, proceeding." 2>&1 | ${TEE} ${log}
-    return 0
-  fi
-
-  # Source local build configuration to get dependencies
-  if [ ! -f "${pkgparsecdir}/${build}.bldconf" ]; then
-    echo "${oprefix} Error: Cannot find local build configuration '${build}.bldconf' for package ${pkg}." 2>&1 | ${TEE} ${log}
-    exit 1
-  else
-    source ${pkgparsecdir}/${build}.bldconf
-  fi
-
-  # Build packages on which pkg depends
-  if [ -z "${build_deps}" ]; then
-    echo "${oprefix} ${pkg} does not depend on any other packages." 2>&1 | ${TEE} ${log}
-  else
-    echo "${oprefix} ${pkg} depends on: ${build_deps}" 2>&1 | ${TEE} ${log}
-  fi
-
-  local dep=""
-  for dep in ${build_deps}; do
-    local tmpdep
-    local index
-    tmpdep=${dep}
-    eval index=`expr "${dep}" : '\.'`
-    if [ $index -eq 0 ]; then
-        eval tmpdep="parsec.${dep}"
-    fi
-    build_package "${tmpdep}"
-  done
-
-  # Now build pkg itself
-  echo "${oprefix} [---------- Building package ${pkg} ----------]" 2>&1 | ${TEE} ${log}
-
-  # Source local package build configuration again (might have gotten overwritten by recursion)
-  if [ ! -f "${pkgparsecdir}/${build}.bldconf" ]; then
-    echo "${oprefix} Error: Cannot find local build configuration '${build}.bldconf' for package ${pkg}." 2>&1 | ${TEE} ${log}
-    exit 1
-  else
-    source ${pkgparsecdir}/${build}.bldconf
-  fi
-
-  # Check for obvious errors
-  if [ -z "${build_inplace}" ]; then
-    echo "${oprefix} Variable 'build_inplace' for package '${benchmark}' has not been set in file '${build}.bldconf'." | ${TEE} ${log}
-    exit 1
-  fi
-
-  # Global arguments to configure script
-  build_conf_global="--prefix=${pkginstdir}"
-
-  # We need either configure or a Makefile
-  if [ ! -x ${pkgsrcdir}/configure -a ! -f ${pkgsrcdir}/[Mm]akefile ]; then
-    echo "${oprefix} Error: Need 'configure' script or a '[Mm]akefile' to build package ${pkg}." 2>&1 | ${TEE} ${log}
-    exit 1
-  fi
-
-  # Remove an already existing build directory
-  if [ -e "${pkgobjdir}" ]; then
-     echo "${oprefix} Removing old build directory." 2>&1 | ${TEE} ${log}
-     ${RM} ${pkgobjdir} 
-  fi
-
-  # Set up build directory
-  if [ "${build_inplace}" == "TRUE" ]; then
-    local pkgbuildsrcdir=${pkgobjdir}
-    echo "${oprefix} Copying source code of package ${pkg}." 2>&1 | ${TEE} ${log}
-    ${MKDIR} ${pkgobjdir} > /dev/null
-    ${CP} ${pkgsrcdir}/* ${pkgobjdir}
-  else
-    local pkgbuildsrcdir=${pkgsrcdir}
-    ${MKDIR} ${pkgobjdir} > /dev/null
-  fi
-  pushd ${pkgobjdir} > /dev/null
-
-  # Run configure
-  if [ -x ${pkgbuildsrcdir}/configure ]; then
-    local build_conf_pkg="${build_conf} ${build_conf_global}"
-    # Current pwd is $pkgobjdir
-    if [ "${pkgobjdir}" == "${pkgbuildsrcdir}" ]; then
-      local configcmd="env ${build_env} ./configure ${build_conf_pkg}"
-    else
-      local configcmd="env ${build_env} ${pkgbuildsrcdir}/configure ${build_conf_pkg}"
-    fi
-    eval echo "${oprefix} Running \'${configcmd}\':" 2>&1 \| ${TEE} ${log}
-    eval \( ${configcmd} 2>&1 \) 2>&1 \| ${TEE} ${log} \; retval=\${PIPESTATUS[0]}
-    if [ "$retval" -ne "0" ]; then
-      eval echo "${oprefix} Error: \'${configcmd}\' failed." 2>&1 \| ${TEE} ${log}
-      popd > /dev/null
-      exit 1
-    fi
-  fi
-  
-  # Make sure a Makefile exists in the build directory
-  if [ ! -f ${pkgobjdir}/[Mm]akefile ]; then
-    echo "${oprefix} Error: Cannot find Makefile in ${pkgobjdir}" 2>&1 | ${TEE} ${log}
-    popd > /dev/null
-    exit 1
-  fi
-
-  # Run make
-  local makecmd="env ${build_env} ${MAKE} -j $(nproc)"
-  eval echo "${oprefix} Running \'$makecmd\':" 2>&1 \| ${TEE} ${log}
-  eval \( ${makecmd} 2>&1 \) 2>&1 \| ${TEE} ${log} \; retval=\${PIPESTATUS[0]}
-  if [ "$retval" -ne "0" ]; then
-    eval echo "${oprefix} Error: \'${makecmd}\' failed." 2>&1 \| ${TEE} ${log}
-    popd > /dev/null
-    exit 1
-  fi
-
-  # Run make install
-  ${MKDIR} ${pkginstdir} > /dev/null
-  local makecmd="env ${build_env} ${MAKE} install"
-  eval echo "${oprefix} Running \'$makecmd\':" 2>&1 \| ${TEE} ${log}
-  eval \( ${makecmd} 2>&1 \) 2>&1 \| ${TEE} ${log} \; retval=\${PIPESTATUS[0]}
-  if [ "$retval" -ne "0" ]; then
-    eval echo "${oprefix} Error: \'${makecmd}\' failed." 2>&1 \| ${TEE} ${log}
-    popd > /dev/null
-    exit 1
-  fi
-
-  popd > /dev/null
-  pushd ${pkginstdir} > /dev/null
-
-  # Create build info file
-  build_info ${pkg} ${pkginstdir}/build-info
-
-  # Finish up
-  popd > /dev/null
 }
 
 # run_benchmark
@@ -1044,46 +505,24 @@ function build_package {
 # Arguments: $1 - The benchmark name
 #            $2 - Which input to use
 #            $3 - The run directory root
-function run_benchmark {
-  if [ -z "$1" ]; then
-    echo "${oprefix} Error: run_benchmark called with no arguments." | ${TEE} ${log}
-    exit 1
-  fi
-  local benchmark=$1
-  if [ -z "$2" ]; then
-      echo "${oprefix} Error: run_benchmark called with insufficient number of arguments." | ${TEE} ${log}
-    exit 1
-  fi
-  local inputsize=$2
-  if [ -z "$3" ]; then
-    if [ ${benchmark} == "parsec.uptcpip" ]; then
-        exit 1
-    fi
-    echo "${oprefix} Error: run_benchmark called with insufficient number of arguments." | ${TEE} ${log}
-    exit 1
-  fi
-  local cite_list=$3
-  if [ -z "$4" ]; then
-    echo "${oprefix} Error: run_benchmark called with insufficient number of arguments." | ${TEE} ${log}
-    exit 1
-  fi
-  local rundir=$4
+run_benchmark() {
+  benchmark=$1
+  inputsize=$2
+  rundir=$3
 
-
-  echo "${oprefix} [========== Running benchmark ${benchmark} [${cite_list}] ==========]" | ${TEE} ${log}
+  echo "${oprefix} [========== Running benchmark ${benchmark} ==========]"
 
   # Load package configuration
   source ${PARSECDIR}/config/packages/${benchmark}.pkgconf
 
   # Define benchmark-specific directories
   if [ -z "${pkg_group}" ]; then
-    echo "${oprefix} Error: Group of benchmark '${benchmark}' is unknown." | ${TEE} ${log}
+    echo "${oprefix} Error: Group of benchmark '${benchmark}' is unknown."
     exit 1
   fi
 
 
   # determine top directory
-  local bench
   bench=`expr match ${benchmark} '\(.*\.\)'`
   eval pkgname="${benchmark#${bench}}"
   bench=${bench%\.}
@@ -1095,58 +534,25 @@ function run_benchmark {
       eval benchdir="ext/${bench}"
   fi
 
-  # splash2 does not support multiple inputs 
-  if [ ${bench} == "splash2" ]; then
-      inputsize="test"
-      echo "${oprefix} NOTE: SPLASH-2 only supports \"test\" input sets." | ${TEE} ${log}
-      echo "${oprefix}       Please use SPLASH-2x for multiple input sets." | ${TEE} ${log}
-  fi
-
-  # splash2 does not support multiple inputs 
-  if [ ${bench} == "splash2" ]; then
-      inputsize="test"
-      echo "${oprefix} NOTE: SPLASH-2 only supports \"test\" input sets." | ${TEE} ${log}
-      echo "${oprefix}       Please use SPLASH-2x for multiple input sets." | ${TEE} ${log}
-  fi
-
-  local platform
-  platform=${PARSECPLAT/serial/REPLACED} # check if gcc-serial
-  if [ ${platform} != ${PARSECPLAT}  ]; then
-      if [ "${NTHREADS}" -gt "1" ]; then
-          NTHREADS=1
-          echo "${oprefix} WARNING: Serial does not support multiple threads." | ${TEE} ${log}
-          echo "${oprefix}          Change thread number to default 1." | ${TEE} ${log}
-      fi
-  fi
-
   # specific cases end
   #
-  
-  local bmrundir="${rundir}/${benchdir}/${pkg_group}/${pkgname}/run"
-  local bmdir="${PARSECDIR}/${benchdir}/${pkg_group}/${pkgname}"
-  local bminputdir="${bmdir}/inputs"
-  local bmoutputdir="${bmdir}/outputs"
-  local bminstdir="${bmdir}/inst/${PARSECPLAT}"
-  local bmparsecdir="${bmdir}/parsec"
 
-  # netapps leverages existing benchmark's inputs
-  if [ ${pkg_group} == "netapps" ]; then
-	if [ ${pkgname} == "netdedup" ] || [ ${pkgname} == "netstreamcluster" ]; then
-		bminputdir=${bminputdir/netapps\/net/kernels\/}
-	elif [ ${pkgname} == "netferret" ]; then
-		bminputdir=${bminputdir/netapps\/net/apps\/}
-	fi
-  fi
- 
+  bmrundir="${rundir}/${benchdir}/${pkg_group}/${pkgname}/run"
+  bmdir="${PARSECDIR}/${benchdir}/${pkg_group}/${pkgname}"
+  bminputdir="${bmdir}/inputs"
+  bmoutputdir="${bmdir}/outputs"
+  bminstdir="${bmdir}/inst/${PARSECPLAT}"
+  bmparsecdir="${bmdir}/parsec"
+
   # Check whether selected input size is available
   if [ ! -f "${PARSECDIR}/config/${inputsize}.runconf" ]; then
-    echo "${oprefix} Error: Selected input size not available."  2>&1 | ${TEE} ${log}
+    echo "${oprefix} Error: Selected input size not available."  2>&1
     exit 1
   fi
 
   # Source package run configuration
   if [ ! -f "${bmparsecdir}/${inputsize}.runconf" ]; then
-    echo "${oprefix} Error: Cannot find run configuration '${inputsize}.runconf' for package ${benchmark}." 2>&1 | ${TEE} ${log}
+    echo "${oprefix} Error: Cannot find run configuration '${inputsize}.runconf' for package ${benchmark}." 2>&1
     exit 1
       get_topdir "${package}"
   else
@@ -1154,119 +560,72 @@ function run_benchmark {
   fi
 
   # Determine binary
-  local bmexec_suffix=${run_exec}
+  bmexec_suffix=${run_exec}
   if [ -z "${bmexec_suffix}" ]; then
-    echo "${oprefix} Variable 'bench_exec_${benchmark}' for package '${benchmark}' has not been set." | ${TEE} ${log}
+    echo "${oprefix} Variable 'bench_exec_${benchmark}' for package '${benchmark}' has not been set."
     exit 1
   fi
-  local bmexec="${bminstdir}/${bmexec_suffix}"
+  bmexec="${bminstdir}/${bmexec_suffix}"
   if [ ! -x "${bmexec}" ]; then
-    echo "${oprefix} Error: Binary '${bmexec}' of package '${benchmark}' cannot be found." | ${TEE} ${log}
+    echo "${oprefix} Error: Binary '${bmexec}' of package '${benchmark}' cannot be found."
     exit 1
   fi
 
   # Determine output archive
-  local bmoutput="${bmoutputdir}/output_${inputsize}.tar"
+  bmoutput="${bmoutputdir}/output_${inputsize}.tar"
   #if [ ! -f "${bmoutput}" ]; then
-  #  echo "${oprefix} Error: Output archive '${bmoutput}' of package '${benchmark}' cannot be found." | ${TEE} ${log}
+  #  echo "${oprefix} Error: Output archive '${bmoutput}' of package '${benchmark}' cannot be found."
   #  exit 1
   #fi
 
   if [ "${keep_rundir}" == "yes" ]; then
     # Keep run directory, just check that it exists
     if [ ! -d "${bmrundir}" ]; then
-      echo "${oprefix} Error: Cannot keep run directory because it does not exist." | ${TEE} ${log} 
+      echo "${oprefix} Error: Cannot keep run directory because it does not exist."
       exit 1
     fi
-    echo "${oprefix} Keeping old run directory." | ${TEE} ${log}
+    echo "${oprefix} Keeping old run directory."
     pushd "${bmrundir}" > /dev/null
-  else 
+  else
     # Set up run directory
     if [ -d "${bmrundir}" ]; then
-      echo "${oprefix} Deleting old run directory." | ${TEE} ${log}
-      ${RM} ${bmrundir} | ${TEE} ${log}
+      echo "${oprefix} Deleting old run directory."
+      ${RM} ${bmrundir}
     fi
 
-    echo "${oprefix} Setting up run directory." | ${TEE} ${log}
-    ${MKDIR} ${bmrundir} | ${TEE} ${log}
+    echo "${oprefix} Setting up run directory."
+    ${MKDIR} ${bmrundir}
     pushd "${bmrundir}" > /dev/null
-    
+
     # Determine input archive
-    local bminput="${bminputdir}/input_${inputsize}.tar"
+    bminput="${bminputdir}/input_${inputsize}.tar"
     if [ ! -f "${bminput}" ]; then
-      echo "${oprefix} No archive for input '${inputsize}' available, skipping input setup." | ${TEE} ${log}
+      echo "${oprefix} No archive for input '${inputsize}' available, skipping input setup."
     else
-      echo "${oprefix} Unpacking benchmark input '${inputsize}'." | ${TEE} ${log}
-      ${UNTAR} ${bminput} | ${TEE} ${log}
+      echo "${oprefix} Unpacking benchmark input '${inputsize}'."
+      ${UNTAR} ${bminput}
     fi
   fi
 
   # Execute
-  local bmexec_args=${run_args}
-  if [ ! -z ${netmode} ]; then
-      bmexec_args="${bmexec_args} ${netmode}"
-  fi 
-  if [ ! -z ${userthreads} ]; then
-      bmexec_args="${bmexec_args} ${userthreads}"
-  fi 
-  if [ ! -z ${rxthreads} ]; then
-      UPTCPIP_RX_THREADS="${rxthreads}"
-      export UPTCPIP_RX_THREADS
-  else
-      UPTCPIP_RX_THREADS=1
-      export UPTCPIP_RX_THREADS
-  fi 
-  eval cmd="\"${submit} ${bmexec} ${bmexec_args}\""
-  echo "${oprefix} Running '${cmd}':" | ${TEE} ${log}
-  echo "${oprefix} [---------- Beginning of output ----------]" | ${TEE} ${log}
-  (eval ${cmd} 2>&1) 2>&1 | ${TEE} ${bmrundir}/benchmark.out | ${TEE} ${log}
-  echo "${oprefix} [----------    End of output    ----------]" | ${TEE} ${log}
-
-
-  # Unpack reference output and compare
-  #echo "${oprefix} Unpacking benchmark reference output for '${inputsize}'." | ${TEE} ${log}
-  #${MKDIR} ${bmrundir}/output.ref | ${TEE} ${log}
-  #cd ${bmrundir}/output.ref
-  #${UNTAR} ${bmoutput} | ${TEE} ${log}
-
-  #echo "${oprefix} Checking benchmark output:" | ${TEE} ${log}
-  #bmcorrect="TRUE"
-  #for outfile in *; do
-  #  echo -n "${oprefix}   ${outfile} - " | ${TEE} ${log}
-  #  if [ ! -f "${bmrundir}/${outfile}" ]; then
-  #    echo "MISSING" | ${TEE} ${log}
-  #    bmcorrect="FALSE"
-  #  else
-  #    ${CMP} ${bmrundir}/output.ref/${outfile} ${bmrundir}/${outfile} > /dev/null
-  #    if [ "$?" == "0" ]; then
-  #      echo "PASSED" | ${TEE} ${log}
-  #    else
-  #      echo "FAILED" | ${TEE} ${log}
-  #      bmcorrect="FALSE"
-  #    fi
-  #  fi
-  #done
-  #if [ "${bmcorrect}" != "TRUE" ]; then
-  #  echo "${oprefix} Error: Benchmark not correctly executed." | ${TEE} ${log}
-  #  exit 1
-  #else
-  #  echo "${oprefix} Benchmark correctly executed." | ${TEE} ${log}
-  #fi
-  popd > /dev/null
+  bmexec_args=${run_args}
+  echo "${oprefix} Running '${cmd}':"
+  echo "${oprefix} [---------- Beginning of output ----------]"
+  eval ${cmd}
+  echo "${oprefix} [----------    End of output    ----------]"
 }
 
-function get_topdir {
+get_topdir() {
   if [ -z "$1" ]; then
-    echo "${oprefix} Error: get_topdir with no arguments." | ${TEE} ${log}
+    echo "${oprefix} Error: get_topdir with no arguments."
     exit 1
   fi
-  local benchmark=$1
+  benchmark=$1
 
   # determine top directory
   benchdir=""
   pkgname=""
-  local bench
-  
+
   bench=`expr match ${benchmark} '\(.*\.\)'`
   eval pkgname="${benchmark#${bench}}"
   bench=${bench%\.}
@@ -1284,494 +643,31 @@ function get_topdir {
 #                                                               #
 #################################################################
 
-# Check version
-if [ ${BASH_VERSINFO[0]} -lt 3 ]; then
-  # We need certain Bash 3 features. e.g. PIPESTATUS (which was available but broken in earlier versions)
-  echo "${oprefix} Warning: At least bash version 3 is recommended. Earlier versions might not function properly. Current version is $BASH_VERSION."
-fi
-
 # Execute functions to setup environment
 parsec_init
 process_args "$@"
 
 # Now we take decisive action
 case ${action} in
-  "build"         )
-    eval echo "${oprefix} \[========== PARSEC $(${CAT} ${PARSECDIR}/version) BUILD LOGFILE ==========\]" > ${log}
-    echo >> ${log}
-    eval echo "${oprefix} Build '${PARSECPLAT}' started on \$(${DATE})." >> ${log}
-    echo "${oprefix} Packages to build: ${pkgs}" 2>&1 | ${TEE} ${log}
-
-    # Prepare LD_LIBRARY_PATH (some build systems call their own binaries)
-    LD_LIBRARY_PATH_orig="${LD_LIBRARY_PATH}"
-    if [ -z "${LD_LIBRARY_PATH}" ]; then
-      export LD_LIBRARY_PATH="${CC_HOME}/lib:${CC_HOME}/lib64"
-    else
-      LD_LIBRARY_PATH="${CC_HOME}/lib:${CC_HOME}/lib64:${LD_LIBRARY_PATH}"
-    fi
-
-    # Initialize local variables
-    list_of_bibentries=""
-
-    # Build all packages
-    for pkg in ${pkgs}; do
-
-      # Load package configuration
-      source ${PARSECDIR}/config/packages/${pkg}.pkgconf
-
-      cite_list=""
-      for bibkey in ${pkg_cite}; do
-        i=1
-        is_duplicate=""
-        for bib in ${list_of_bibentries}; do
-          if [[ "${bibkey}" == "${bib}" ]]; then
-            is_duplicate="TRUE"
-            break
-          fi
-          ((i++))
-        done
-        if [[ -z "${is_duplicate}" ]]; then
-          # A unique entry, append to bibliography list
-          # (Note: Order is important because of the numbering)
-          list_of_bibentries="${list_of_bibentries} ${bibkey}"
-        fi
-        # Always append citation number to list of citations for component
-        if [[ -z "${cite_list}" ]]; then
-          cite_list="$i"
-        else
-          cite_list="${cite_list},${i}"
-        fi
-      done
-
-
-      echo | ${TEE} ${log}
-      echo "${oprefix} [========== Building package ${pkg} [${cite_list}] ==========]" | ${TEE} ${log}
-      build_package "${pkg}"
-    done
-
-    # Bibliography list
-    echo "${oprefix}"
-    echo "${oprefix} BIBLIOGRAPHY"
-    echo "${oprefix}"
-    # Initialize variables & iterate through list of used bib entries
-    i=1
-    for bibkey in ${list_of_bibentries}; do
-      bibfile="${PARSECDIR}/config/bibliography/${bibkey}.bibconf"
-      if [[ -f ${bibfile} ]]; then
-        source ${bibfile}
-        echo "${oprefix} [${i}] ${bib_string}"
-      else
-        echo "${oprefix} [${i}] ERROR: File '${bibkey}.bibconf' does not exist."
-      fi
-      ((i++))
-    done
-    echo "${oprefix}"
- 
-
-    # Restore LD_LIBRARY_PATH
-    LD_LIBRARY_PATH="${LD_LIBRARY_PATH_orig}"
-
-    echo "${oprefix} Done." | ${TEE} ${log};;
   "run"           )
-    eval echo "${oprefix} \[========== PARSEC $(${CAT} ${PARSECDIR}/version) RUN LOGFILE ==========\]" > ${log}
-    echo >> ${log}
-    eval echo "${oprefix} Run with '${PARSECPLAT}' binaries and input ${inputsize} started on \$(${DATE})." >> ${log}
-  #  echo "${oprefix} Using ${rundir} as run directory root." >> ${log}
-    echo "${oprefix} Benchmarks to run: ${pkgs}" 2>&1 | ${TEE} ${log}
+    echo "${oprefix} Benchmarks to run: ${pkgs}" 2>&1
+
+    export LD_LIBRARY_PATH="${CC_HOME}/lib:${CC_HOME}/lib64"
 
     # Prepare LD_LIBRARY_PATH
-    LD_LIBRARY_PATH_orig="${LD_LIBRARY_PATH}"
-    if [ -z "${LD_LIBRARY_PATH}" ]; then
-      export LD_LIBRARY_PATH="${CC_HOME}/lib:${CC_HOME}/lib64"
-    else
-      LD_LIBRARY_PATH="${CC_HOME}/lib:${CC_HOME}/lib64:${LD_LIBRARY_PATH}"
+    if [ -n "${LD_LIBRARY_PATH}" ]; then
+      LD_LIBRARY_PATH+=":${LD_LIBRARY_PATH}"
     fi
-
-    # Initialize local variables
-    list_of_bibentries=""
 
     # Execute all benchmarks
     for benchmark in ${pkgs}; do
-
       # Load package configuration
       source ${PARSECDIR}/config/packages/${benchmark}.pkgconf
 
-      cite_list=""
-      for bibkey in ${pkg_cite}; do
-        i=1
-        is_duplicate=""
-        for bib in ${list_of_bibentries}; do
-          if [[ "${bibkey}" == "${bib}" ]]; then
-            is_duplicate="TRUE"
-            break
-          fi
-          ((i++))
-        done
-        if [[ -z "${is_duplicate}" ]]; then
-          # A unique entry, append to bibliography list
-          # (Note: Order is important because of the numbering)
-          list_of_bibentries="${list_of_bibentries} ${bibkey}"
-        fi
-        # Always append citation number to list of citations for component
-        if [[ -z "${cite_list}" ]]; then
-          cite_list="$i"
-        else
-          cite_list="${cite_list},${i}"
-        fi
-      done
-
-      echo | ${TEE} ${log}
-      run_benchmark "${benchmark}" "${inputsize}" "${cite_list}" "${rundir}"
+      run_benchmark "${benchmark}" "${inputsize}" "${rundir}"
     done
 
-    # Bibliography list
-    echo "${oprefix}"
-    echo "${oprefix} BIBLIOGRAPHY"
-    echo "${oprefix}"
-    # Initialize variables & iterate through list of used bib entries
-    i=1
-    for bibkey in ${list_of_bibentries}; do
-      bibfile="${PARSECDIR}/config/bibliography/${bibkey}.bibconf"
-      if [[ -f ${bibfile} ]]; then
-        source ${bibfile}
-        echo "${oprefix} [${i}] ${bib_string}"
-      else
-        echo "${oprefix} [${i}] ERROR: File '${bibkey}.bibconf' does not exist."
-      fi
-      ((i++))
-    done
-    echo "${oprefix}"
- 
-    # Restore LD_LIBRARY_PATH
-    LD_LIBRARY_PATH="${LD_LIBRARY_PATH_orig}"
-
-    echo "${oprefix} Done." | ${TEE} ${log};;
-  "clean"         )
-    echo "${oprefix} Removing build and run files for build '${PARSECPLAT}':"
-    for package in ${pkgs}; do
-      # Load package configuration
-      source ${PARSECDIR}/config/packages/${package}.pkgconf
-
-      get_topdir "${package}"
-      # Setup
-      packagedir="${PARSECDIR}/${benchdir}/${pkg_group}/${pkgname}"
-      packageobjdir="${packagedir}/obj/${PARSECPLAT}"
-      packageparsecdir="${packagedir}/parsec"
-      packagerundir="${rundir}/${benchdir}/${pkg_group}/${pkgname}/run"
-      cleanenv="sysconfig=\"${sysconfig}\" packagedir=\"${packagedir}\""
-      nothingtodo=""
-
-      echo -n "${oprefix} ${package} - "
-
-      # Remove build directory
-      if [ -d "${packageobjdir}" ]; then
-        echo -n "[Removing build '${PARSECPLAT}'] "
-        ${RM} ${packageobjdir}
-        nothingtodo="FALSE"
-      fi
-
-      # Remove run directory
-      if [ -d "${packagerundir}" ]; then
-        echo -n "[Removing run directory]"
-        ${RM} ${packagerundir}
-        nothingtodo="FALSE"
-      fi
-
-      # Finish
-      if [ -z "${nothingtodo}" ]; then
-        echo -n "[Nothing to do]"
-      fi
-      echo ""
-    done
-    exit 0;;
-  "uninstall"     )
-    echo "${oprefix} Removing installations for build '${PARSECPLAT}':"
-    for package in ${pkgs}; do
-      # Load package configuration
-      source ${PARSECDIR}/config/packages/${package}.pkgconf
-
-      get_topdir "${package}"
-
-      # Setup
-      packagedir="${PARSECDIR}/${benchdir}/${pkg_group}/${pkgname}"
-      packageinstdir="${packagedir}/inst/${PARSECPLAT}"
-      packageparsecdir="${packagedir}/parsec"
-      cleanenv="sysconfig=\"${sysconfig}\" packagedir=\"${packagedir}\""
-      nothingtodo=""
-
-      echo -n "${oprefix} ${package} - "
-
-      # Remove inst directory
-      if [ -d "${packageinstdir}" ]; then
-        echo -n "[Removing installation '${PARSECPLAT}'] "
-        ${RM} ${packageinstdir}
-        nothingtodo="FALSE"
-      fi
-
-      # Finish
-      if [ -z "${nothingtodo}" ]; then
-        echo -n "[Nothing to do]"
-      fi
-      echo ""
-    done
-    exit 0;;
-  "fullclean"     )
-    echo "${oprefix} Removing all build and run files:"
-    for package in ${pkgs}; do
-      # Load package configuration
-      source ${PARSECDIR}/config/packages/${package}.pkgconf
-
-      get_topdir "${package}"
-      # Setup
-      packagedir="${PARSECDIR}/${benchdir}/${pkg_group}/${pkgname}"
-      packageobjdir="${packagedir}/obj"
-      packageparsecdir="${packagedir}/parsec"
-      packagerundir="${rundir}/${benchdir}/${pkg_group}/${pkgname}/run"
-      cleanenv="sysconfig=\"${sysconfig}\" packagedir=\"${packagedir}\""
-      nothingtodo=""
-
-      echo -n "${oprefix} ${package} - "
-
-      # Remove obj directory
-      if [ -d "${packageobjdir}" ]; then
-        echo -n "[Removing build directory] "
-        ${RM} ${packageobjdir}
-        nothingtodo="FALSE"
-      fi
-
-      # Remove run directory
-      if [ -d "${packagerundir}" ]; then
-        echo -n "[Removing run directory] "
-        ${RM} ${packagerundir}
-        nothingtodo="FALSE"
-      fi
-
-      # Finish
-      if [ -z "${nothingtodo}" ]; then
-        echo -n "[Nothing to do]"
-      fi
-      echo ""
-    done
-    exit 0;;
-  "fulluninstall" )
-    echo "${oprefix} Removing all installed files:"
-    for package in ${pkgs}; do
-      # Load package configuration
-      source ${PARSECDIR}/config/packages/${package}.pkgconf
-
-      get_topdir "${package}"
-      # Setup
-      packagedir="${PARSECDIR}/${benchdir}/${pkg_group}/${pkgname}"
-      packageinstdir="${packagedir}/inst"
-      packageparsecdir="${packagedir}/parsec"
-      cleanenv="sysconfig=\"${sysconfig}\" packagedir=\"${packagedir}\""
-      nothingtodo=""
-
-      echo -n "${oprefix} ${package} - "
-
-      # Remove inst directory
-      if [ -d "${packageinstdir}" ]; then
-        echo -n "[Removing installation directory]"
-        ${RM} ${packageinstdir}
-        nothingtodo="FALSE"
-      fi
-
-      # Finish
-      if [ -z "${nothingtodo}" ]; then
-        echo -n "[Nothing to do]"
-      fi
-      echo ""
-    done
-    exit 0;;
-  "status"        )
-    echo "${oprefix} Installation status of selected packages: "
-
-    # Initialize local variables
-    list_of_bibentries=""
-
-    for package in ${pkgs}; do
-      # Load package configuration
-      source ${PARSECDIR}/config/packages/${package}.pkgconf
-
-      echo "${oprefix}"
-      cite_list=""
-      for bibkey in ${pkg_cite}; do
-        i=1
-        is_duplicate=""
-        for bib in ${list_of_bibentries}; do
-          if [[ "${bibkey}" == "${bib}" ]]; then
-            is_duplicate="TRUE"
-            break
-          fi
-          ((i++))
-        done
-        if [[ -z "${is_duplicate}" ]]; then
-          # A unique entry, append to bibliography list
-          # (Note: Order is important because of the numbering)
-          list_of_bibentries="${list_of_bibentries} ${bibkey}"
-        fi
-        # Always append citation number to list of citations for component
-        if [[ -z "${cite_list}" ]]; then
-          cite_list="$i"
-        else
-          cite_list="${cite_list},${i}"
-        fi
-      done
-
-      get_topdir "${package}"
-
-      echo "${oprefix} ${package} [${cite_list}]:"
-      packageinstdir="${PARSECDIR}/${benchdir}/${pkg_group}/${pkgname}/inst"
-      if [ -d "${packageinstdir}" ]; then
-        build_arch_dirs="$(${LS} ${packageinstdir})"
-        if [ -z "${build_arch_dirs}" ]; then
-          echo -e "${oprefix}   -no installations-"
-        else
-          found_insts="FALSE"
-          for archdir in $build_arch_dirs; do
-            if [ -f "${packageinstdir}/${archdir}/build-info" ]; then
-              echo -e "${oprefix}   ${archdir}"
-              found_insts="TRUE"
-            fi
-          done
-          if [ "${found_insts}" == "FALSE" ]; then
-            echo -e "${oprefix}   -no installations-"
-          fi
-        fi
-      else
-        echo -e "${oprefix}   -no installations-"
-      fi
-    done
-
-    # Bibliography list
-    echo "${oprefix}"
-    echo "${oprefix} BIBLIOGRAPHY"
-    echo "${oprefix}"
-    # Initialize variables & iterate through list of used bib entries
-    i=1
-    for bibkey in ${list_of_bibentries}; do
-      bibfile="${PARSECDIR}/config/bibliography/${bibkey}.bibconf"
-      if [[ -f ${bibfile} ]]; then
-        source ${bibfile}
-        echo "${oprefix} [${i}] ${bib_string}"
-      else
-        echo "${oprefix} [${i}] ERROR: File '${bibkey}.bibconf' does not exist."
-      fi
-      ((i++))
-    done
- 
-    exit 0;;
-  "info"        )
-    # Initialize local variables
-    list_of_bibentries=""
-    parsecversion="$(${CAT} ${PARSECDIR}/version)"
-    # Output header
-    echo "${oprefix} PARSEC Distribution v${parsecversion}"
-    echo "${oprefix}"
-    # List all available packages
-    echo "${oprefix} PACKAGES"
-    echo "${oprefix}"
-    for file in ${PARSECDIR}/config/packages/*.pkgconf; do
-      # Get package name
-      eval package=$(${BASENAME} $file)
-      package=${package%\.pkgconf}
-      # Load package configuration
-      source ${PARSECDIR}/config/packages/${package}.pkgconf
-      # Update bibliography list & get citation reference numbers
-      cite_list=""
-      for bibkey in ${pkg_cite}; do
-        i=1
-        is_duplicate=""
-        for bib in ${list_of_bibentries}; do
-          if [[ "${bibkey}" == "${bib}" ]]; then
-            is_duplicate="TRUE"
-            break
-          fi
-          ((i++))
-        done
-        if [[ -z "${is_duplicate}" ]]; then
-          # A unique entry, append to bibliography list
-          # (Note: Order is important because of the numbering)
-          list_of_bibentries="${list_of_bibentries} ${bibkey}"
-        fi
-        # Always append citation number to list of citations for component
-        if [[ -z "${cite_list}" ]]; then
-          cite_list="$i"
-        else
-          cite_list="${cite_list},${i}"
-        fi
-      done
-      # Create output
-      echo "${oprefix} ${package} [${cite_list}] (${pkg_domain})"
-      echo "${oprefix} ${pkg_desc}"
-      echo "${oprefix}   Package Group: ${pkg_group}"
-      echo "${oprefix}   Contributor:   ${pkg_contrib}"
-      echo "${oprefix}   Aliases:       ${pkg_aliases}"
-      echo "${oprefix}"
-    done
-    # List all available input sets
-    echo "${oprefix} INPUT SETS"
-    echo "${oprefix}"
-    for inputfile in ${PARSECDIR}/config/*.runconf; do
-      # Get input name
-      inputname=$(${BASENAME} ${inputfile})
-      inputname=${inputname/%.runconf/}
-      # Load configuration file
-      source ${inputfile}
-      # Update bibliography list & get citation reference numbers
-      cite_list=""
-      for bibkey in ${pkg_cite}; do
-        i=1
-        is_duplicate=""
-        for bib in ${list_of_bibentries}; do
-          if [[ "${bibkey}" == "${bib}" ]]; then
-            is_duplicate="TRUE"
-            break
-          fi
-          ((i++))
-        done
-        if [[ -z "${is_duplicate}" ]]; then
-          # A unique entry, append to bibliography list
-          # (Note: Order is important because of the numbering)
-          list_of_bibentries="${list_of_bibentries} ${bibkey}"
-        fi
-        # Always append citation number to list of citations for component
-        if [[ -z "${cite_list}" ]]; then
-          cite_list="$i"
-        else
-          cite_list="${cite_list},${i}"
-        fi
-      done
-      # Output information
-      echo "${oprefix} ${inputname} [${cite_list}]"
-      echo "${oprefix} ${run_desc}"
-      echo "${oprefix}"
-    done
-    # List all supported build configurations
-    echo "${oprefix} BUILD CONFIGURATIONS"
-    echo "${oprefix}"
-    build_config_files=$(ls ${PARSECDIR}/config/*.bldconf)
-    for file in ${build_config_files}; do
-      config_file_base=$(${BASENAME} ${file})
-      echo "${oprefix} ${config_file_base%.bldconf}"
-    done
-    # Bibliography list
-    echo "${oprefix}"
-    echo "${oprefix} BIBLIOGRAPHY"
-    echo "${oprefix}"
-    # Initialize variables & iterate through list of used bib entries
-    i=1
-    for bibkey in ${list_of_bibentries}; do
-      bibfile="${PARSECDIR}/config/bibliography/${bibkey}.bibconf"
-      if [[ -f ${bibfile} ]]; then
-        source ${bibfile}
-        echo "${oprefix} [${i}] ${bib_string}"
-      else
-        echo "${oprefix} [${i}] ERROR: File '${bibkey}.bibconf' does not exist."
-      fi
-      ((i++))
-    done
-    exit 0;;
+    echo "${oprefix} Done.";;
   *           )
     echo "${oprefix} Error: Unknown action '${action}'."
     exit 1;;
